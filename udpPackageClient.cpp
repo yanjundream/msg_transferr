@@ -11,6 +11,8 @@
 // and on any theory of liability, whether in contract, strict liability,
 // or tort (including negligence or otherwise) arising in any way out of
 // the use of this software, even if advised of the possibility of such damage.
+
+//testtesttest
 //=============================================================================
 
 /*
@@ -79,7 +81,7 @@ typedef struct
 
 } sPacket;
 
-
+int t;
 
 bool IPAddress_StringToAddr(char *szNameOrAddress, struct in_addr *Address);
 void Unpack(char* pData);
