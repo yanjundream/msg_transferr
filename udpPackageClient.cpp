@@ -81,7 +81,6 @@ typedef struct
 
 } sPacket;
 
-int t;
 
 bool IPAddress_StringToAddr(char *szNameOrAddress, struct in_addr *Address);
 void Unpack(char* pData);
@@ -113,10 +112,11 @@ int gCommandResponseCode = 0;
 unsigned int len_RBdata2szData=0;
 unsigned int len_RBdata=0;
 unsigned int offset_frame_RBdata = 0;
-char* nameStart[];
-char RBbuf[2000];
+char* nameStart[] = {0};
+char transBuf[2000];
+char* transBuf_p;
 char bm_addr[128];
-
+  
 // command response listener thread
 DWORD WINAPI CommandListenThread(void* dummy)
 {
@@ -218,23 +218,15 @@ DWORD WINAPI DataListenThread(void* dummy)
 		//int nDataBytesReceived = 
 		recvfrom(DataSocket, szData, sizeof(szData), 0, (sockaddr *)&TheirAddress, &addr_len);
 		/**********************************************/
-		int frameNumber = 0; memcpy(&frameNumber, szData+offset_frame_RBdata, 4); 
+		int frameNumber = 3;
+		//memcpy(&frameNumber, szData+offset_frame_RBdata, 4); 
 	
 		if (frameNumber%4==0)// change the frequency of receive message
 		{ 
-			Unpack(szData);
-			startaddr = szData + len_RBdata2szData;
-			printf("-------------Frame # : %d\n", frameNumber);
-			printf("the offset of RigidBodydata is: %d\n", len_RBdata2szData);
-			printf("the length of data is: %d\n", len_RBdata);
-			printf("the startaddr is : %d\n", startaddr);
-
+			//Unpack(szData);
+			startaddr = transBuf;
 			memcpy(transData,startaddr,len_RBdata);
-		//	printf("this is direct printf of  transData[200] is : %d\n", transData[2000]);
-			DB_unpack(transData);
-			printf("this is direct printf %s\n", transData);
-			printf("the length of sendmessage is %d\n", sizeof(transData));
-
+		//	DB_unpack(transData);
 			sendto(sockTransData, transData, sizeof(transData), 0, (SOCKADDR*)&addrSrv, len);
 			printf("%s\n", transData);
 
@@ -297,8 +289,8 @@ int main(int argc, char* argv[])
 	int optval_size = 4;
 
 
-	printf("Please inpute the IP address of the computer with Blabbermouth: ");
-	std::cin >> bm_addr;
+	//printf("Please inpute the IP address of the computer with Blabbermouth: ");
+	//std::cin >> bm_addr;
 
 
 	if (WSAStartup(0x101, &WsaData) == SOCKET_ERROR)
@@ -707,6 +699,8 @@ void Unpack(char* pData)
 		int nMarkerSets = 0; memcpy(&nMarkerSets, ptr, 4); ptr += 4;
 		printf("Marker Set Count : %d\n", nMarkerSets);
 
+
+
 		for (int i = 0; i < nMarkerSets; i++)
 		{
 			nameStart[i] = ptr;
@@ -717,6 +711,8 @@ void Unpack(char* pData)
 			ptr += nDataBytes;
 			//printf("Model Name: %s\n", szName);
 
+
+
 			// marker data
 			int nMarkers = 0; memcpy(&nMarkers, ptr, 4); ptr += 4;
 			printf("Marker Count : %d\n", nMarkers);
@@ -726,7 +722,7 @@ void Unpack(char* pData)
 				float x = 0; memcpy(&x, ptr, 4); ptr += 4;
 				float y = 0; memcpy(&y, ptr, 4); ptr += 4;
 				float z = 0; memcpy(&z, ptr, 4); ptr += 4;
-		//		printf("\tMarker %d : [x=%3.2f,y=%3.2f,z=%3.2f]\n", j, x, y, z);
+		//		printf("\tMarker %d : [x=%3.2f,y=%3.2f,z=%3.2f]\n", j, dsfsdf
 			}
 		}
 
@@ -745,14 +741,29 @@ void Unpack(char* pData)
 
 		int nRigidBodies = 0;
 
-		addr_start_RB = ptr;
-		len_RBdata2szData = addr_start_RB- addr_szData;
+		addr_start_RB = transBuf_p;
+		//len_RBdata2szData = addr_start_RB- addr_szData;
 
 
-		memcpy(&nRigidBodies, ptr, 4); ptr += 4;
+		memcpy(&nRigidBodies, ptr, 4); 
+		memcpy(transBuf, ptr, 4);
+		transBuf_p += 4;
+		ptr += 4;
+
 		printf("Rigid Body Count : %d\n", nRigidBodies);
 		for (int j = 0; j < nRigidBodies; j++)
 		{
+			//name of regid body
+			char regidbodyname[256];
+			strcpy_s(regidbodyname, nameStart[j]);
+			int nDataBytes = (int)strlen(regidbodyname) + 1;
+			memcpy(transBuf_p, nameStart[j], nDataBytes);//copy the name to the buf
+			printf("Model Name: %s\n", nameStart[j]);
+			transBuf_p = transBuf_p + nDataBytes + 1;
+			memcpy(transBuf_p, ptr, 32);
+			transBuf_p = transBuf_p + 33;
+
+
 			// rigid body pos/ori
 			int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
 			float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
@@ -826,7 +837,7 @@ void Unpack(char* pData)
 
 		} // next rigid body
 
-		addr_end_RB=ptr;
+		addr_end_RB=transBuf_p;
 		len_RBdata = addr_end_RB- addr_start_RB;
 
 
@@ -1127,7 +1138,7 @@ void Unpack(char* pData)
 
 }
 
-
+/*
 void DB_unpack(char* pData)
 {
 	printf("Begin Packet Rigid Body Data\n-------\n");
@@ -1141,7 +1152,7 @@ void DB_unpack(char* pData)
 
 	//	printf("Begin Packet\n-------\n");
 
-	/*
+	
 
 	// message ID
 	int MessageID = 0;
@@ -1167,7 +1178,7 @@ void DB_unpack(char* pData)
 	ptr = startData +len_RBdata2szData;
 
 	
-	*/
+	
 
 	
 	// rigid bodies**************************************************************************************
@@ -1178,7 +1189,10 @@ void DB_unpack(char* pData)
 	memcpy(&nRigidBodies, ptr, 4); ptr += 4;
 	printf("Rigid Body Count : %d\n", nRigidBodies);
 	for (int j = 0; j < nRigidBodies; j++)
+
 	{
+		
+		
 		// rigid body pos/ori
 		int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
 		float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
@@ -1258,4 +1272,38 @@ void DB_unpack(char* pData)
 
 }
 
+*/
+
+void DB_unpack(char* pData)
+{
+	char *ptr;
+	ptr = pData;
+	int nRigidBodies = 0;
+	memcpy(&nRigidBodies, ptr, 4);
+	ptr += 4;
+	printf("@DB_unpack--Rigid Body Count : %d\n", nRigidBodies);
+	for (int j = 0; j < nRigidBodies; j++)
+	{
+		//name of regid body
+		char regidbodyname[256];
+		strcpy_s(regidbodyname, ptr);
+		int nDataBytes = (int)strlen(regidbodyname) + 1;
+		printf("@DB_unpack--Model Name: %s\n", regidbodyname);
+		ptr += nDataBytes;
+
+		// rigid body pos/ori
+		int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
+		float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
+		float y = 0.0f; memcpy(&y, ptr, 4); ptr += 4;
+		float z = 0.0f; memcpy(&z, ptr, 4); ptr += 4;
+		float qx = 0; memcpy(&qx, ptr, 4); ptr += 4;
+		float qy = 0; memcpy(&qy, ptr, 4); ptr += 4;
+		float qz = 0; memcpy(&qz, ptr, 4); ptr += 4;
+		float qw = 0; memcpy(&qw, ptr, 4); ptr += 4;
+		//			printf("ID : %d\n", ID);
+		//			printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+		//			printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+
+	}
+}
 
