@@ -11,8 +11,6 @@
 // and on any theory of liability, whether in contract, strict liability,
 // or tort (including negligence or otherwise) arising in any way out of
 // the use of this software, even if advised of the possibility of such damage.
-
-//testtesttest
 //=============================================================================
 
 /*
@@ -31,12 +29,12 @@ PacketClient [ServerIP] [LocalIP]
 */
 
 #include <stdio.h>
-#include <iostream>
 #include <tchar.h>
 #include <conio.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-
+#include <string>
+#include <iostream>
 
 #pragma warning( disable : 4996 )
 
@@ -84,9 +82,6 @@ typedef struct
 
 bool IPAddress_StringToAddr(char *szNameOrAddress, struct in_addr *Address);
 void Unpack(char* pData);
-
-void DB_unpack(char* pData);
-
 int GetLocalIPAddresses(unsigned long Addresses[], int nMax);
 int SendCommand(char* szCOmmand);
 
@@ -107,16 +102,16 @@ int gCommandResponseSize = 0;
 unsigned char gCommandResponseString[MAX_PATH];
 int gCommandResponseCode = 0;
 
-//**************************************************************
+/////////for blabbermouth by cao//////
 
-unsigned int len_RBdata2szData=0;
-unsigned int len_RBdata=0;
-unsigned int offset_frame_RBdata = 0;
-char* nameStart[] = {0};
-char transBuf[2000];
-char* transBuf_p;
+int frameNumber = 0;
+char dataTrans[1000];
+char* dataTrans_p;
 char bm_addr[128];
-  
+void unpack_dataTrans(char* pData);
+char markerset_name[100][256];
+
+
 // command response listener thread
 DWORD WINAPI CommandListenThread(void* dummy)
 {
@@ -187,58 +182,35 @@ DWORD WINAPI CommandListenThread(void* dummy)
 // Data listener thread
 DWORD WINAPI DataListenThread(void* dummy)
 {
-
-	//define socket to receive data from optitrack
-    char  szData[20000];
+	char  szData[20000];
 	int addr_len = sizeof(struct sockaddr);
 	sockaddr_in TheirAddress;
-	int nDataBytesReceived = recvfrom(DataSocket, szData, sizeof(szData), 0, (sockaddr *)&TheirAddress, &addr_len);
-	printf("All data address start from: %d\n", szData);
-	Unpack(szData);
 
-	//define socket to send data to serve
 	SOCKADDR_IN addrSrv;
-	//addrSrv.sin_addr.S_un.S_addr = inet_addr("192.168.0.119");
-	//addrSrv.sin_addr.S_un.S_addr = inet_addr("192.168.127.129");
-
 
 	addrSrv.sin_addr.S_un.S_addr = inet_addr(bm_addr);//bm_addr is defined at the begining which is the address of blabberrmouth
 	addrSrv.sin_family = AF_INET;
 	addrSrv.sin_port = htons(8888);
 	SOCKET sockTransData = socket(AF_INET, SOCK_DGRAM, 0);
-
 	int len = sizeof(SOCKADDR);
 
-	char transData[2000];
-	char* startaddr;
-
 	while (1)
-	{	
-		
-		//int nDataBytesReceived = 
+	{
 		recvfrom(DataSocket, szData, sizeof(szData), 0, (sockaddr *)&TheirAddress, &addr_len);
-		/**********************************************/
-		int frameNumber = 3;
-		//memcpy(&frameNumber, szData+offset_frame_RBdata, 4); 
-	
-		if (frameNumber%4==0)// change the frequency of receive message
-		{ 
-			//Unpack(szData);
-			startaddr = transBuf;
-			memcpy(transData,startaddr,len_RBdata);
-		//	DB_unpack(transData);
-			sendto(sockTransData, transData, sizeof(transData), 0, (SOCKADDR*)&addrSrv, len);
-			printf("%s\n", transData);
-
-	}
+		Unpack(szData);
+		unpack_dataTrans(dataTrans);
+		if (frameNumber % 4 == 0)// change the frequency of receive message
+		{
+			//printf("this is direct printf %s\n", dataTrans);
+			//printf("the length of sendmessage is %d\n", sizeof(dataTrans));
+			sendto(sockTransData, dataTrans, sizeof(dataTrans), 0, (SOCKADDR*)&addrSrv, len);
 		
+		}
+
 	}
 
-	closesocket(sockTransData);
 	return 0;
 }
-
-
 
 SOCKET CreateCommandSocket(unsigned long IP_Address, unsigned short uPort)
 {
@@ -276,8 +248,6 @@ SOCKET CreateCommandSocket(unsigned long IP_Address, unsigned short uPort)
 	return sockfd;
 }
 
-
-
 int main(int argc, char* argv[])
 {
 	int retval;
@@ -288,12 +258,10 @@ int main(int argc, char* argv[])
 	int optval = 0x100000;
 	int optval_size = 4;
 
+	printf("Please inpute the IP address of the computer with Blabbermouth: ");
+	std::cin >> bm_addr;
 
-	//printf("Please inpute the IP address of the computer with Blabbermouth: ");
-	//std::cin >> bm_addr;
-
-
-	if (WSAStartup(0x101, &WsaData) == SOCKET_ERROR)
+	if (WSAStartup(0x202, &WsaData) == SOCKET_ERROR)
 	{
 		printf("[PacketClient] WSAStartup failed (error: %d)\n", WSAGetLastError());
 		WSACleanup();
@@ -406,11 +374,6 @@ int main(int argc, char* argv[])
 	DWORD DataListenThread_ID;
 	HANDLE DataListenThread_Handle;
 	DataListenThread_Handle = CreateThread(&security_attribs, 0, DataListenThread, NULL, 0, &DataListenThread_ID);
-
-
-
-
-	//CloseHandle(transDataThread);
 
 
 	// server address for commands
@@ -666,16 +629,15 @@ bool TimecodeStringify(unsigned int inTimecode, unsigned int inTimecodeSubframe,
 
 void Unpack(char* pData)
 {
-	char* addr_start_RB;
-	char* addr_end_RB;
+	dataTrans_p = dataTrans;
 
+	
 	int major = NatNetVersion[0];
 	int minor = NatNetVersion[1];
 
 	char *ptr = pData;
-	char *addr_szData = pData;
 
-	printf("Begin Packet in main Unpack function\n-------\n");
+	printf("Begin Packet\n-------\n");
 
 	// message ID
 	int MessageID = 0;
@@ -690,28 +652,33 @@ void Unpack(char* pData)
 	if (MessageID == 7)      // FRAME OF MOCAP DATA packet
 	{
 		// frame number
-		offset_frame_RBdata = ptr- addr_szData;
-		int frameNumber = 0; memcpy(&frameNumber, ptr, 4); ptr += 4;
+	    memcpy(&frameNumber, ptr, 4); 
+		memcpy(dataTrans, ptr, 4);
+		ptr += 4;
+		dataTrans_p += 4;
 		printf("Frame # : %d\n", frameNumber);
 
 		// number of data sets (markersets, rigidbodies, etc)
-		
-		int nMarkerSets = 0; memcpy(&nMarkerSets, ptr, 4); ptr += 4;
+		int nMarkerSets = 0;
+		memcpy(&nMarkerSets, ptr, 4);
+		memcpy(dataTrans_p, ptr, 4);
+		ptr += 4;
+		dataTrans_p += 4;
 		printf("Marker Set Count : %d\n", nMarkerSets);
-
-
 
 		for (int i = 0; i < nMarkerSets; i++)
 		{
-			nameStart[i] = ptr;
 			// Markerset name
 			char szName[256];
 			strcpy_s(szName, ptr);
 			int nDataBytes = (int)strlen(szName) + 1;
+			for (int j = 0; j < 256; j++) {
+			markerset_name[i][j] = szName[j];
+			}
+			
 			ptr += nDataBytes;
-			//printf("Model Name: %s\n", szName);
-
-
+			//printf("Model Name1: %s\n", markerset_name[i]);
+			std::cout << "The model name 1 is :" << markerset_name[i]<<std::endl;
 
 			// marker data
 			int nMarkers = 0; memcpy(&nMarkers, ptr, 4); ptr += 4;
@@ -722,7 +689,7 @@ void Unpack(char* pData)
 				float x = 0; memcpy(&x, ptr, 4); ptr += 4;
 				float y = 0; memcpy(&y, ptr, 4); ptr += 4;
 				float z = 0; memcpy(&z, ptr, 4); ptr += 4;
-		//		printf("\tMarker %d : [x=%3.2f,y=%3.2f,z=%3.2f]\n", j, dsfsdf
+		//		printf("\tMarker %d : [x=%3.2f,y=%3.2f,z=%3.2f]\n", j, x, y, z);
 			}
 		}
 
@@ -734,52 +701,73 @@ void Unpack(char* pData)
 			float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
 			float y = 0.0f; memcpy(&y, ptr, 4); ptr += 4;
 			float z = 0.0f; memcpy(&z, ptr, 4); ptr += 4;
- //   		printf("\tMarker %d : pos = [%3.2f,%3.2f,%3.2f]\n", j, x, y, z);
+		//	printf("\tMarker %d : pos = [%3.2f,%3.2f,%3.2f]\n", j, x, y, z);
 		}
 
-		// rigid bodies**************************************************************************************
-
+		// rigid bodies
 		int nRigidBodies = 0;
-
-		addr_start_RB = transBuf_p;
-		//len_RBdata2szData = addr_start_RB- addr_szData;
-
-
-		memcpy(&nRigidBodies, ptr, 4); 
-		memcpy(transBuf, ptr, 4);
-		transBuf_p += 4;
+		memcpy(&nRigidBodies, ptr, 4);
+		memcpy(dataTrans_p, ptr, 4);
+		dataTrans_p += 4;
 		ptr += 4;
-
 		printf("Rigid Body Count : %d\n", nRigidBodies);
 		for (int j = 0; j < nRigidBodies; j++)
 		{
-			//name of regid body
-			char regidbodyname[256];
-			strcpy_s(regidbodyname, nameStart[j]);
-			int nDataBytes = (int)strlen(regidbodyname) + 1;
-			memcpy(transBuf_p, nameStart[j], nDataBytes);//copy the name to the buf
-			printf("Model Name: %s\n", nameStart[j]);
-			transBuf_p = transBuf_p + nDataBytes + 1;
-			memcpy(transBuf_p, ptr, 32);
-			transBuf_p = transBuf_p + 33;
-
+			//void* marker_p = markerset_name[j];
+			strcpy(dataTrans_p, markerset_name[j]);
+			dataTrans_p = dataTrans_p+ sizeof(markerset_name[j]+1);
+			std::cout << "The model name 2 is " << markerset_name[j]<<std::endl;
+			//printf("Model Name2: %s\n", markerset_name[j]);
 
 			// rigid body pos/ori
-			int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
-			float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
-			float y = 0.0f; memcpy(&y, ptr, 4); ptr += 4;
-			float z = 0.0f; memcpy(&z, ptr, 4); ptr += 4;
-			float qx = 0; memcpy(&qx, ptr, 4); ptr += 4;
-			float qy = 0; memcpy(&qy, ptr, 4); ptr += 4;
-			float qz = 0; memcpy(&qz, ptr, 4); ptr += 4;
-			float qw = 0; memcpy(&qw, ptr, 4); ptr += 4;
-//			printf("ID : %d\n", ID);
-//			printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-//			printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+			int ID = 0;
+			memcpy(&ID, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float x = 0.0f;
+			memcpy(&x, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float y = 0.0f;
+			memcpy(&y, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float z = 0.0f;
+			memcpy(&z, ptr, 4); 
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float qx = 0;
+			memcpy(&qx, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float qy = 0;
+			memcpy(&qy, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float qz = 0;
+			memcpy(&qz, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+			float qw = 0;
+			memcpy(&qw, ptr, 4);
+			memcpy(dataTrans_p, ptr, 4);
+			dataTrans_p += 4;
+			ptr += 4;
+
+			printf("ID : %d\n", ID);
+			printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+			printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
 
 			// associated marker positions
 			int nRigidMarkers = 0;  memcpy(&nRigidMarkers, ptr, 4); ptr += 4;
-//			printf("Marker Count: %d\n", nRigidMarkers);
+			printf("Marker Count: %d\n", nRigidMarkers);
 			int nBytes = nRigidMarkers * 3 * sizeof(float);
 			float* markerData = (float*)malloc(nBytes);
 			memcpy(markerData, ptr, nBytes);
@@ -801,7 +789,7 @@ void Unpack(char* pData)
 
 				for (int k = 0; k < nRigidMarkers; k++)
 				{
-//-					printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
+					printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
 				}
 
 				if (markerIDs)
@@ -814,7 +802,7 @@ void Unpack(char* pData)
 			{
 				for (int k = 0; k < nRigidMarkers; k++)
 				{
-//-					printf("\tMarker %d: pos = [%3.2f,%3.2f,%3.2f]\n", k, markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
+					printf("\tMarker %d: pos = [%3.2f,%3.2f,%3.2f]\n", k, markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
 				}
 			}
 			if (markerData)
@@ -824,7 +812,7 @@ void Unpack(char* pData)
 			{
 				// Mean marker error
 				float fError = 0.0f; memcpy(&fError, ptr, 4); ptr += 4;
-//-				printf("Mean marker error: %3.2f\n", fError);
+				printf("Mean marker error: %3.2f\n", fError);
 			}
 
 			// 2.6 and later
@@ -836,9 +824,6 @@ void Unpack(char* pData)
 			}
 
 		} // next rigid body
-
-		addr_end_RB=transBuf_p;
-		len_RBdata = addr_end_RB- addr_start_RB;
 
 
 		  // skeletons (version 2.1 and later)
@@ -867,9 +852,9 @@ void Unpack(char* pData)
 					float qy = 0; memcpy(&qy, ptr, 4); ptr += 4;
 					float qz = 0; memcpy(&qz, ptr, 4); ptr += 4;
 					float qw = 0; memcpy(&qw, ptr, 4); ptr += 4;
-//					printf("ID : %d\n", ID);
-//					printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-//					printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+					printf("ID : %d\n", ID);
+					printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+					printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
 
 					// associated marker positions
 					int nRigidMarkers = 0;  memcpy(&nRigidMarkers, ptr, 4); ptr += 4;
@@ -953,9 +938,9 @@ void Unpack(char* pData)
 					bool bModelSolved = params & 0x04;  // position provided by model solve
 				}
 
-		//		printf("ID  : %d\n", ID);
-		//		printf("pos : [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-		//		printf("size: [%3.2f]\n", size);
+				printf("ID  : %d\n", ID);
+				printf("pos : [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+				printf("size: [%3.2f]\n", size);
 			}
 		}
 
@@ -1138,172 +1123,66 @@ void Unpack(char* pData)
 
 }
 
-/*
-void DB_unpack(char* pData)
+
+void unpack_dataTrans(char* pData)
 {
-	printf("Begin Packet Rigid Body Data\n-------\n");
-	char *ptr = pData;
-//	char *startData = pData;
-	
-	//char *startData = pData;
-	int major = NatNetVersion[0];
-	int minor = NatNetVersion[1];
-	//printf("major is %d and minor is %d\n", major, minor);// major is 2 and minor is 10;
+	char* ptr = pData;
+	int framenumber = 0;
+	memcpy(&framenumber,ptr,4);
+	printf("@unpack_dataTrans framenumber is : \n", framenumber);
+	ptr += 4;
 
-	//	printf("Begin Packet\n-------\n");
+	int nMarkerSets = 0;
+	memcpy(&nMarkerSets, ptr, 4);
+	ptr += 4;
+	printf("@unpack_dataTransMarker Set Count : %d\n", nMarkerSets);
 
-	
-
-	// message ID
-	int MessageID = 0;
-	memcpy(&MessageID, ptr, 2); ptr += 2;
-	printf("Message ID : %d\n", MessageID);
-
-	// size
-	int nBytes = 0;
-	memcpy(&nBytes, ptr, 2); ptr += 2;
-	printf("Byte count : %d\n", nBytes);
-
-	if (MessageID == 7)      // FRAME OF MOCAP DATA packet
-	{
-		// frame number
-		int frameNumber = 0; memcpy(&frameNumber, ptr, 4); ptr += 4;
-		printf("Frame # : %d\n", frameNumber);
-
-		// number of data sets (markersets, rigidbodies, etc)
-		int nMarkerSets = 0; memcpy(&nMarkerSets, ptr, 4); ptr += 4;
-		printf("Marker Set Count : %d\n", nMarkerSets);
-	}
-	
-	ptr = startData +len_RBdata2szData;
-
-	
-	
-
-	
-	// rigid bodies**************************************************************************************
-
-
-	int nRigidBodies = 0;
-
-	memcpy(&nRigidBodies, ptr, 4); ptr += 4;
-	printf("Rigid Body Count : %d\n", nRigidBodies);
-	for (int j = 0; j < nRigidBodies; j++)
-
-	{
-		
-		
-		// rigid body pos/ori
-		int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
-		float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
-		float y = 0.0f; memcpy(&y, ptr, 4); ptr += 4;
-		float z = 0.0f; memcpy(&z, ptr, 4); ptr += 4;
-		float qx = 0; memcpy(&qx, ptr, 4); ptr += 4;
-		float qy = 0; memcpy(&qy, ptr, 4); ptr += 4;
-		float qz = 0; memcpy(&qz, ptr, 4); ptr += 4;
-		float qw = 0; memcpy(&qw, ptr, 4); ptr += 4;
-					printf("ID : %d\n", ID);
-					printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-					printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
-
-		// associated marker positions
-		int nRigidMarkers = 0;  memcpy(&nRigidMarkers, ptr, 4); ptr += 4;
-		printf("Marker Count: %d\n", nRigidMarkers);
-		int nBytes = nRigidMarkers * 3 * sizeof(float);
-		float* markerData = (float*)malloc(nBytes);
-		memcpy(markerData, ptr, nBytes);
-		ptr += nBytes;
-
-		if (major >= 2)
-		{
-			
-			// associated marker IDs
-			nBytes = nRigidMarkers * sizeof(int);
-			int* markerIDs = (int*)malloc(nBytes);
-			memcpy(markerIDs, ptr, nBytes);
-			ptr += nBytes;
-
-			// associated marker sizes
-			nBytes = nRigidMarkers * sizeof(float);
-			float* markerSizes = (float*)malloc(nBytes);
-			memcpy(markerSizes, ptr, nBytes);
-			ptr += nBytes;
-
-			for (int k = 0; k < nRigidMarkers; k++)
-			{
-		//				printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
-			}
-
-			if (markerIDs)
-				free(markerIDs);
-			if (markerSizes)
-				free(markerSizes);
-
-		}
-		else
-		{
-		
-			for (int k = 0; k < nRigidMarkers; k++)
-			{
-	//						printf("\tMarker %d: pos = [%3.2f,%3.2f,%3.2f]\n", k, markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
-			}
-		}
-		if (markerData)
-			free(markerData);
-
-		if (major >= 2)
-		{
-		
-			// Mean marker error
-			float fError = 0.0f; memcpy(&fError, ptr, 4); ptr += 4;
-						printf("Mean marker error: %3.2f\n", fError);
-		}
-
-		// 2.6 and later
-		if (((major == 2) && (minor >= 6)) || (major > 2) || (major == 0))
-		{
-		
-			// params
-			short params = 0; memcpy(&params, ptr, 2); ptr += 2;
-			bool bTrackingValid = params & 0x01; // 0x01 : rigid body was successfully tracked in this frame
-		}
-
-	} // next rigid body
-
-}
-
-*/
-
-void DB_unpack(char* pData)
-{
-	char *ptr;
-	ptr = pData;
+	// rigid bodies
 	int nRigidBodies = 0;
 	memcpy(&nRigidBodies, ptr, 4);
 	ptr += 4;
-	printf("@DB_unpack--Rigid Body Count : %d\n", nRigidBodies);
+	printf("@unpack_dataTransRigid Body Count : %d\n", nRigidBodies);
+
+
 	for (int j = 0; j < nRigidBodies; j++)
 	{
-		//name of regid body
-		char regidbodyname[256];
-		strcpy_s(regidbodyname, ptr);
-		int nDataBytes = (int)strlen(regidbodyname) + 1;
-		printf("@DB_unpack--Model Name: %s\n", regidbodyname);
+		char szName[256];
+		strcpy_s(szName, ptr);
+		int nDataBytes = (int)strlen(szName) + 1;
 		ptr += nDataBytes;
+	//	printf("@unpack_dataTransModel Name1: %s\n", szName);
+		std::cout << "@unpack_dataTransMode Name1:" << szName<< std::endl;
 
 		// rigid body pos/ori
-		int ID = 0; memcpy(&ID, ptr, 4); ptr += 4;
-		float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
-		float y = 0.0f; memcpy(&y, ptr, 4); ptr += 4;
-		float z = 0.0f; memcpy(&z, ptr, 4); ptr += 4;
-		float qx = 0; memcpy(&qx, ptr, 4); ptr += 4;
-		float qy = 0; memcpy(&qy, ptr, 4); ptr += 4;
-		float qz = 0; memcpy(&qz, ptr, 4); ptr += 4;
-		float qw = 0; memcpy(&qw, ptr, 4); ptr += 4;
-		//			printf("ID : %d\n", ID);
-		//			printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-		//			printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+		int ID = 0;
+		memcpy(&ID, ptr, 4);
+		ptr += 4;
+		float x = 0.0f;
+		memcpy(&x, ptr, 4);
+		ptr += 4;
+		float y = 0.0f;
+		memcpy(&y, ptr, 4);
+		ptr += 4;
+		float z = 0.0f;
+		memcpy(&z, ptr, 4);
+		ptr += 4;
+		float qx = 0;
+		memcpy(&qx, ptr, 4);
+		ptr += 4;
+		float qy = 0;
+		memcpy(&qy, ptr, 4);
+		ptr += 4;
+		float qz = 0;
+		memcpy(&qz, ptr, 4);
+		ptr += 4;
+		float qw = 0;
+		memcpy(&qw, ptr, 4);
+		ptr += 4;
+
+		printf("@unpack_dataTransID : %d\n", ID);
+		printf("@unpack_dataTranspos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+		printf("@unpack_dataTransori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
 
 	}
-}
 
+}
