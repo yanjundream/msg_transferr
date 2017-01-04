@@ -35,10 +35,14 @@ PacketClient [ServerIP] [LocalIP]
 #include <ws2tcpip.h>
 #include <string>
 #include <iostream>
+#include <math.h>
+#include <time.h>
 
 #pragma warning( disable : 4996 )
 
 #define MAX_NAMELENGTH              256
+#define CLAMP(x , min , max) ((x) > (max) ? (max) : ((x) < (min) ? (min) : x))
+
 
 // NATNET message ids
 #define NAT_PING                    0 
@@ -199,7 +203,7 @@ DWORD WINAPI DataListenThread(void* dummy)
 		recvfrom(DataSocket, szData, sizeof(szData), 0, (sockaddr *)&TheirAddress, &addr_len);
 		Unpack(szData);
 		unpack_dataTrans(dataTrans);
-		if (frameNumber % 4 == 0)// change the frequency of receive message
+		if (frameNumber % 6 == 0)// change the frequency of receive message
 		{
 			//printf("this is direct printf %s\n", dataTrans);
 			//printf("the length of sendmessage is %d\n", sizeof(dataTrans));
@@ -637,17 +641,17 @@ void Unpack(char* pData)
 
 	char *ptr = pData;
 
-	printf("Begin Packet\n-------\n");
+	//printf("Begin Packet\n-------\n");
 
 	// message ID
 	int MessageID = 0;
 	memcpy(&MessageID, ptr, 2); ptr += 2;
-	printf("Message ID : %d\n", MessageID);
+	//printf("Message ID : %d\n", MessageID);
 
 	// size
 	int nBytes = 0;
 	memcpy(&nBytes, ptr, 2); ptr += 2;
-	printf("Byte count : %d\n", nBytes);
+	//printf("Byte count : %d\n", nBytes);
 
 	if (MessageID == 7)      // FRAME OF MOCAP DATA packet
 	{
@@ -656,7 +660,7 @@ void Unpack(char* pData)
 		memcpy(dataTrans, ptr, 4);
 		ptr += 4;
 		dataTrans_p += 4;
-		printf("Frame # : %d\n", frameNumber);
+		//printf("Frame # : %d\n", frameNumber);
 
 		// number of data sets (markersets, rigidbodies, etc)
 		int nMarkerSets = 0;
@@ -664,7 +668,7 @@ void Unpack(char* pData)
 		memcpy(dataTrans_p, ptr, 4);
 		ptr += 4;
 		dataTrans_p += 4;
-		printf("Marker Set Count : %d\n", nMarkerSets);
+		//printf("Marker Set Count : %d\n", nMarkerSets);
 
 		for (int i = 0; i < nMarkerSets; i++)
 		{
@@ -678,11 +682,11 @@ void Unpack(char* pData)
 			
 			ptr += nDataBytes;
 			//printf("Model Name1: %s\n", markerset_name[i]);
-			std::cout << "The model name 1 is :" << markerset_name[i]<<std::endl;
+			//std::cout << "The model name 1 is :" << markerset_name[i]<<std::endl;
 
 			// marker data
 			int nMarkers = 0; memcpy(&nMarkers, ptr, 4); ptr += 4;
-			printf("Marker Count : %d\n", nMarkers);
+			//printf("Marker Count : %d\n", nMarkers);
 
 			for (int j = 0; j < nMarkers; j++)
 			{
@@ -695,7 +699,7 @@ void Unpack(char* pData)
 
 		// unidentified markers
 		int nOtherMarkers = 0; memcpy(&nOtherMarkers, ptr, 4); ptr += 4;
-		printf("Unidentified Marker Count : %d\n", nOtherMarkers);
+		//printf("Unidentified Marker Count : %d\n", nOtherMarkers);
 		for (int j = 0; j < nOtherMarkers; j++)
 		{
 			float x = 0.0f; memcpy(&x, ptr, 4); ptr += 4;
@@ -710,13 +714,13 @@ void Unpack(char* pData)
 		memcpy(dataTrans_p, ptr, 4);
 		dataTrans_p += 4;
 		ptr += 4;
-		printf("Rigid Body Count : %d\n", nRigidBodies);
+		//printf("Rigid Body Count : %d\n", nRigidBodies);
 		for (int j = 0; j < nRigidBodies; j++)
 		{
 			//void* marker_p = markerset_name[j];
 			strcpy(dataTrans_p, markerset_name[j]);
 			dataTrans_p = dataTrans_p+ sizeof(markerset_name[j]+1);
-			std::cout << "The model name 2 is " << markerset_name[j]<<std::endl;
+		//	std::cout << "The model name 2 is " << markerset_name[j]<<std::endl;
 			//printf("Model Name2: %s\n", markerset_name[j]);
 
 			// rigid body pos/ori
@@ -761,13 +765,13 @@ void Unpack(char* pData)
 			dataTrans_p += 4;
 			ptr += 4;
 
-			printf("ID : %d\n", ID);
-			printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-			printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+			//printf("ID : %d\n", ID);
+			//printf("pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+			//printf("ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
 
 			// associated marker positions
 			int nRigidMarkers = 0;  memcpy(&nRigidMarkers, ptr, 4); ptr += 4;
-			printf("Marker Count: %d\n", nRigidMarkers);
+			//printf("Marker Count: %d\n", nRigidMarkers);
 			int nBytes = nRigidMarkers * 3 * sizeof(float);
 			float* markerData = (float*)malloc(nBytes);
 			memcpy(markerData, ptr, nBytes);
@@ -789,7 +793,7 @@ void Unpack(char* pData)
 
 				for (int k = 0; k < nRigidMarkers; k++)
 				{
-					printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
+				//	printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
 				}
 
 				if (markerIDs)
@@ -802,7 +806,7 @@ void Unpack(char* pData)
 			{
 				for (int k = 0; k < nRigidMarkers; k++)
 				{
-					printf("\tMarker %d: pos = [%3.2f,%3.2f,%3.2f]\n", k, markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
+					//printf("\tMarker %d: pos = [%3.2f,%3.2f,%3.2f]\n", k, markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
 				}
 			}
 			if (markerData)
@@ -812,7 +816,7 @@ void Unpack(char* pData)
 			{
 				// Mean marker error
 				float fError = 0.0f; memcpy(&fError, ptr, 4); ptr += 4;
-				printf("Mean marker error: %3.2f\n", fError);
+				//printf("Mean marker error: %3.2f\n", fError);
 			}
 
 			// 2.6 and later
@@ -831,7 +835,7 @@ void Unpack(char* pData)
 		{
 			int nSkeletons = 0;
 			memcpy(&nSkeletons, ptr, 4); ptr += 4;
-			printf("Skeleton Count : %d\n", nSkeletons);
+			//printf("Skeleton Count : %d\n", nSkeletons);
 			for (int j = 0; j < nSkeletons; j++)
 			{
 				// skeleton id
@@ -840,7 +844,7 @@ void Unpack(char* pData)
 				// # of rigid bodies (bones) in skeleton
 				int nRigidBodies = 0;
 				memcpy(&nRigidBodies, ptr, 4); ptr += 4;
-				printf("Rigid Body Count : %d\n", nRigidBodies);
+			//	printf("Rigid Body Count : %d\n", nRigidBodies);
 				for (int j = 0; j < nRigidBodies; j++)
 				{
 					// rigid body pos/ori
@@ -878,7 +882,7 @@ void Unpack(char* pData)
 
 					for (int k = 0; k < nRigidMarkers; k++)
 					{
-						printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
+					//	printf("\tMarker %d: id=%d\tsize=%3.1f\tpos=[%3.2f,%3.2f,%3.2f]\n", k, markerIDs[k], markerSizes[k], markerData[k * 3], markerData[k * 3 + 1], markerData[k * 3 + 2]);
 					}
 
 					// Mean marker error (2.0 and later)
@@ -914,7 +918,7 @@ void Unpack(char* pData)
 		{
 			int nLabeledMarkers = 0;
 			memcpy(&nLabeledMarkers, ptr, 4); ptr += 4;
-			printf("Labeled Marker Count : %d\n", nLabeledMarkers);
+			//printf("Labeled Marker Count : %d\n", nLabeledMarkers);
 			for (int j = 0; j < nLabeledMarkers; j++)
 			{
 				// id
@@ -938,9 +942,9 @@ void Unpack(char* pData)
 					bool bModelSolved = params & 0x04;  // position provided by model solve
 				}
 
-				printf("ID  : %d\n", ID);
-				printf("pos : [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-				printf("size: [%3.2f]\n", size);
+			//	printf("ID  : %d\n", ID);
+			//	printf("pos : [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+			//	printf("size: [%3.2f]\n", size);
 			}
 		}
 
@@ -1135,13 +1139,13 @@ void unpack_dataTrans(char* pData)
 	int nMarkerSets = 0;
 	memcpy(&nMarkerSets, ptr, 4);
 	ptr += 4;
-	printf("@unpack_dataTransMarker Set Count : %d\n", nMarkerSets);
+//	printf("@unpack_dataTransMarker Set Count : %d\n", nMarkerSets);
 
 	// rigid bodies
 	int nRigidBodies = 0;
 	memcpy(&nRigidBodies, ptr, 4);
 	ptr += 4;
-	printf("@unpack_dataTransRigid Body Count : %d\n", nRigidBodies);
+//	printf("@unpack_dataTransRigid Body Count : %d\n", nRigidBodies);
 
 
 	for (int j = 0; j < nRigidBodies; j++)
@@ -1150,6 +1154,7 @@ void unpack_dataTrans(char* pData)
 		strcpy_s(szName, ptr);
 		int nDataBytes = (int)strlen(szName) + 1;
 		ptr += nDataBytes;
+		float fRoll, fPitch, fYaw;
 	//	printf("@unpack_dataTransModel Name1: %s\n", szName);
 		std::cout << "@unpack_dataTransMode Name1:" << szName<< std::endl;
 
@@ -1178,10 +1183,31 @@ void unpack_dataTrans(char* pData)
 		float qw = 0;
 		memcpy(&qw, ptr, 4);
 		ptr += 4;
+		fRoll = atan2(2 * (qw * qz + qx * qy), 1 - 2 * (qz * qz + qx * qx));
+		fPitch = asin(CLAMP(2 * (qw * qx - qy * qz), -1.0f, 1.0f));
+		fYaw = atan2(2 * (qw * qy + qz * qx), 1 - 2 * (qx * qx + qy * qy));
 
-		printf("@unpack_dataTransID : %d\n", ID);
-		printf("@unpack_dataTranspos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
-		printf("@unpack_dataTransori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+
+	//	printf("@unpack_dataTrans_ID : %d\n", ID);
+		printf("@unpack_dataTrans_pos: [%3.2f,%3.2f,%3.2f]\n", x, y, z);
+	//	printf("@unpack_dataTrans_ori: [%3.2f,%3.2f,%3.2f,%3.2f]\n", qx, qy, qz, qw);
+		printf("@unpack_dataTrans_euler: [%3.2f,%3.2f,%3.2f]\n", fRoll, fPitch, fYaw);
+
+		time_t rawtime;
+		struct tm * ptm;
+
+		time(&rawtime);
+
+		ptm = gmtime(&rawtime);
+
+		long time_now;
+		time_now = ptm->tm_hour*3600 + ptm->tm_min*60 + ptm->tm_sec;
+		printf("time=%ld\n", time_now);
+
+
+
+
+
 
 	}
 
